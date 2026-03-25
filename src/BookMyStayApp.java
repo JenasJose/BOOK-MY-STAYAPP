@@ -1,8 +1,9 @@
+import java.io.*;
 import java.util.*;
-import java.util.concurrent.*;
 
-// Class representing a hotel room
-class Room {
+// Serializable Room class
+class Room implements Serializable {
+    private static final long serialVersionUID = 1L;
     int roomNumber;
     boolean isBooked;
 
@@ -10,19 +11,16 @@ class Room {
         this.roomNumber = roomNumber;
         this.isBooked = false;
     }
-}
 
-// Class representing a booking request
-class BookingRequest {
-    String guestName;
-
-    public BookingRequest(String guestName) {
-        this.guestName = guestName;
+    @Override
+    public String toString() {
+        return "Room " + roomNumber + " -> " + (isBooked ? "Booked" : "Available");
     }
 }
 
-// Class representing the hotel with synchronized booking
-class Hotel {
+// Serializable Hotel class with persistence methods
+class Hotel implements Serializable {
+    private static final long serialVersionUID = 1L;
     private List<Room> rooms;
 
     public Hotel(int totalRooms) {
@@ -32,8 +30,8 @@ class Hotel {
         }
     }
 
-    // Thread-safe booking method
-    public synchronized boolean bookRoom(String guestName) {
+    // Book a room
+    public boolean bookRoom(String guestName) {
         for (Room room : rooms) {
             if (!room.isBooked) {
                 room.isBooked = true;
@@ -45,73 +43,82 @@ class Hotel {
         return false;
     }
 
-    // Display current room status
+    // Display room status
     public void displayRooms() {
         System.out.println("\nCurrent Room Status:");
         for (Room room : rooms) {
-            System.out.println("Room " + room.roomNumber + " -> " + (room.isBooked ? "Booked" : "Available"));
+            System.out.println(room);
         }
     }
-}
 
-// Runnable task for booking a room
-class BookingTask implements Runnable {
-    private Hotel hotel;
-    private BookingRequest request;
-
-    public BookingTask(Hotel hotel, BookingRequest request) {
-        this.hotel = hotel;
-        this.request = request;
+    // Save hotel state to file
+    public void saveState(String filename) {
+        try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(filename))) {
+            out.writeObject(this);
+            System.out.println("\nSystem state saved successfully to " + filename);
+        } catch (IOException e) {
+            System.out.println("Error saving state: " + e.getMessage());
+        }
     }
 
-    @Override
-    public void run() {
-        hotel.bookRoom(request.guestName);
+    // Load hotel state from file
+    public static Hotel loadState(String filename) {
+        try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(filename))) {
+            Hotel hotel = (Hotel) in.readObject();
+            System.out.println("System state restored from " + filename);
+            return hotel;
+        } catch (FileNotFoundException e) {
+            System.out.println("No saved state found. Starting fresh.");
+            return null;
+        } catch (IOException | ClassNotFoundException e) {
+            System.out.println("Error restoring state: " + e.getMessage());
+            return null;
+        }
     }
 }
 
 // Main class
-public class BookMyStayApp
-{
+public class BookMyStayApp {
+    private static final String STATE_FILE = "hotel_state.ser";
+
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
 
-        System.out.print("Enter total number of rooms in the hotel: ");
-        int totalRooms = scanner.nextInt();
-        scanner.nextLine(); // Consume newline
+        // Try to restore hotel state
+        Hotel hotel = Hotel.loadState(STATE_FILE);
 
-        System.out.print("Enter number of guests trying to book simultaneously: ");
-        int guestCount = scanner.nextInt();
-        scanner.nextLine(); // Consume newline
-
-        Hotel hotel = new Hotel(totalRooms);
-
-        List<Thread> threads = new ArrayList<>();
-
-        for (int i = 1; i <= guestCount; i++) {
-            System.out.print("Enter name of Guest " + i + ": ");
-            String guestName = scanner.nextLine();
-            BookingRequest request = new BookingRequest(guestName);
-            Thread t = new Thread(new BookingTask(hotel, request));
-            threads.add(t);
+        if (hotel == null) {
+            System.out.print("Enter total number of rooms in the hotel: ");
+            int totalRooms = scanner.nextInt();
+            scanner.nextLine(); // Consume newline
+            hotel = new Hotel(totalRooms);
         }
 
-        // Start all threads (simulate concurrent booking)
-        for (Thread t : threads) {
-            t.start();
-        }
+        while (true) {
+            System.out.println("\n1. Book a Room");
+            System.out.println("2. View Rooms");
+            System.out.println("3. Save & Exit");
+            System.out.print("Choose an option: ");
+            int choice = scanner.nextInt();
+            scanner.nextLine(); // Consume newline
 
-        // Wait for all threads to finish
-        for (Thread t : threads) {
-            try {
-                t.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            switch (choice) {
+                case 1:
+                    System.out.print("Enter guest name: ");
+                    String guestName = scanner.nextLine();
+                    hotel.bookRoom(guestName);
+                    break;
+                case 2:
+                    hotel.displayRooms();
+                    break;
+                case 3:
+                    hotel.saveState(STATE_FILE);
+                    System.out.println("Exiting system...");
+                    scanner.close();
+                    return;
+                default:
+                    System.out.println("Invalid choice. Try again.");
             }
         }
-
-        // Display final room allocation
-        hotel.displayRooms();
-        scanner.close();
     }
 }
